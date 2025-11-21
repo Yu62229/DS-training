@@ -1,0 +1,102 @@
+[workspace]
+channels = ["conda-forge"]
+name = "DS-training"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+# Global configurations
+[activation.env]
+PYTHONPATH = "$PYTHONPATH:$PWD/third_party/Megatron-LM"
+LD_LIBRARY_PATH = "$CONDA_PREFIX/lib:$CONDA_PREFIX/../../../third_party/pytorch/torch/lib"
+TORCH_CUDA_ARCH_LIST = "7.0"
+OMP_NUM_THREADS = "4"
+
+[dependencies]
+python = "3.12.*"
+pip = "*"
+cuda = "12.8.*"
+cudnn = ">=9.10.1.4,<10"
+cuda-toolkit = ">=12.8.1,<13"
+uv = ">=0.7.12,<0.8"
+polars = ">=1.30.0,<2"
+openmpi = ">=5.0.8,<6"
+libcudss-dev = ">=0.6.0.5,<0.7"
+cusparselt-dev = ">=0.7.1.0,<0.8"
+ninja = "*"
+triton = ">=3.3.1,<4"
+ccache = ">=4.11.3,<5"
+cmake = "*"
+bear = ">=3.1.6,<4"
+cuda-nvtx-dev = ">=12.8.90,<13"
+pydantic = ">=2.11.7,<3"
+nltk = ">=3.9.1,<4"
+datasets = ">=3.6.0,<4"
+cuda-nvvm = ">=12.8.93,<13"
+jq = ">=1.8.1,<2"
+nsight-compute = ">=2025.1.1.2,<2026"
+nodejs = ">=24.9.0,<24.10"
+pybind11 = ">=3.0.0,<4"
+
+[pypi-dependencies]
+mkl-static = ">=2025.1.0, <2026"
+mkl-include = ">=2025.1.0, <2026"
+pip = ">=25.1.1,<26"
+nvidia-nvcomp-cu12 = ">=5.0.0.6, <6"
+einops = ">=0.8.0"
+
+# Main task that runs the complete PyTorch setup
+[tasks]
+test = { cmd = "python scripts/test.py" }
+bench-ddp = { cmd = "time torchrun --nproc_per_node=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l) src/comp.py", env = { OMP_NUM_THREADS = "8" }}
+fault = { cmd = "sudo python3 scripts/fault_injection.py" }
+
+[tasks.build-torch]
+cmd = "pip3 install torch torchvision"
+env.USE_CUDA = "1"
+env.USE_CUDNN = "1"
+env.USE_NCCL = "1"
+env.USE_XPU = "0"
+env.USE_DISTRIBUTED = "1"
+env.USE_SYSTEM_NCCL = "0"
+env.CMAKE_PREFIX_PATH = "${CONDA_PREFIX}:${CMAKE_PREFIX_PATH}"
+env.CMAKE_POLICY_VERSION_MINIMUM = "3.5"
+env.CUDA_INC_PATH = "$CONDA_PREFIX/targets/x86_64-linux/include:$CONDA_PREFIX/include"
+env.CUDA_LIB_PATH = "$CONDA_PREFIX/targets/x86_64-linux/lib:$CONDA_PREFIX/lib"
+
+[tasks.clone-apex]
+depends-on = ["build-torch"]
+cmd = "bash scripts/clone-or-pull.sh git@github.com:Yu62229/apex.git third_party/apex"
+[tasks.build-apex]
+depends-on = ["clone-apex"]
+cwd = "third_party/apex"
+cmd = "CUDA_HOME=$CONDA_PREFIX pip install -v --disable-pip-version-check --no-cache-dir --no-build-isolation --config-settings \"--build-option=--cpp_ext --cuda_ext --parallel 8\" ./"
+env.NVCC_APPEND_FLAGS = "--threads 8"
+
+[tasks.megatron-clone]
+depends-on = ["build-apex"]
+[tasks.build-megatron]
+cwd = "third_party/QuantComm-Megatron-LM"
+cmd = "bash docker/common/install_source_wheels.sh --environment dev"
+depends-on = ["megatron-clone"]
+env.CUDA_PATH = "$CONDA_PREFIX"
+env.CUDNN_PATH = "$CONDA_PREFIX/include"
+env.CPLUS_INCLUDE_PATH = "$CONDA_PREFIX/include:$CPLUS_INCLUDE_PATH"
+env.UV_LINK_MODE = "copy"
+env.GROUPED_GEMM_CUTLASS="1"
+
+[tasks.install-megatron]
+depends-on = ["build-megatron"]
+
+[tasks.build]
+depends-on = ["install-megatron"]
+
+# Scripts to test gpt training in megatron
+[tasks.setup-data]
+cmd = "bash setup-data.sh"
+cwd = "./megatron-bench"
+[tasks.test-gpt]
+cmd = "bash train.sh"
+cwd = "./megatron-bench"
+[tasks.train]
+cmd = "bash slurm_train.sh"
+cwd = "./third_party/QuantComm-Megatron-LM"
