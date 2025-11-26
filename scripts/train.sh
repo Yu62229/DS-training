@@ -15,5 +15,4 @@
 #SBATCH --mail-user=hychen62229@gapp.nthu.edu.tw
 
 cd /work/hychen62229/DS-training
-srun pixi run train
-#hostname -i
+srun pixi run run-gpt

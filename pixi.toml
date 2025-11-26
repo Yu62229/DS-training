@@ -94,9 +94,12 @@ depends-on = ["install-megatron"]
 [tasks.setup-data]
 cmd = "bash setup-data.sh"
 cwd = "./megatron-bench"
-[tasks.test-gpt]
-cmd = "bash train.sh"
-cwd = "./megatron-bench"
 [tasks.train]
-cmd = "bash slurm_train.sh"
+cmd = "sbatch train.sh"
+cwd = "./scripts"
+[tasks.run-gpt]
+cmd = "bash train_slurm.sh"
+cwd = "./third_party/QuantComm-Megatron-LM"
+[tasks.load-c4]
+cmd = "python c4_data.py"
 cwd = "./third_party/QuantComm-Megatron-LM"
